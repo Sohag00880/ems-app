@@ -1,0 +1,38 @@
+{
+  "name": "ems-mobile",
+  "version": "0.1.0",
+  "main": "expo/AppEntry.js",
+  "private": true,
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "lint": "eslint . --ext .js,.jsx --max-warnings 0",
+    "lint:fix": "eslint . --ext .js,.jsx --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "build:dev:android": "eas build --profile development --platform android",
+    "start:dev-client": "expo start --dev-client"
+  },
+  "dependencies": {
+    "expo": "~57.0.0",
+    "expo-file-system": "~57.0.7",
+    "expo-location": "~57.0.21",
+    "expo-secure-store": "~57.0.4",
+    "expo-status-bar": "~57.0.1",
+    "expo-task-manager": "~57.0.21",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-get-random-values": "~1.11.0",
+    "react-native-safe-area-context": "~5.7.0",
+    "uuid": "^14.0.3"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "eslint-config-expo": "~57.0.2",
+    "eslint-config-prettier": "^9.1.0",
+    "expo-dev-client": "~57.0.20",
+    "prettier": "^3.3.2"
+  }
+}
