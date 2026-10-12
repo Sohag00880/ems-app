@@ -8,17 +8,26 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://ems-server-ibas.onrender.com"
       }
     },
     "preview": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://ems-server-ibas.onrender.com"
       }
     },
     "production": {
       "android": {
         "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://ems-server-ibas.onrender.com"
       }
     }
   },
