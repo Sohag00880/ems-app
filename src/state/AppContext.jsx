@@ -1,4 +1,11 @@
-import React, { createContext, useContext, useCallback, useEffect, useRef, useState } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { api, ApiError, setAccessToken } from '../lib/api.js';
 import {
   loadAccessToken,
@@ -14,6 +21,7 @@ import {
   endVisit,
   reconcileSession,
   subscribeToForeground,
+  checkPermissions,
 } from '../lib/tracker.js';
 import { uploadLoop } from '../lib/uploader.js';
 
@@ -22,17 +30,21 @@ const AppContext = createContext(null);
 export function AppProvider({ children }) {
   const [booting, setBooting] = useState(true);
   const [user, setUser] = useState(null);
-  const [session, setSession] = useState(null); // { id, startedAt, foregroundOnly? }
-  const [perm, setPerm] = useState({ foreground: 'undetermined', background: 'undetermined', servicesEnabled: true });
+  const [session, setSession] = useState(null);
+  const [perm, setPerm] = useState({
+    foreground: 'undetermined',
+    background: 'undetermined',
+    servicesEnabled: true,
+  });
+  const [permissionsReady, setPermissionsReady] = useState(false);
   const [queueInfo, setQueueInfo] = useState({ count: 0, sessionIds: [] });
   const [lastLocationAt, setLastLocationAt] = useState(null);
-  const [lastAccuracy, setLastAccuracy] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
 
   const intervalRef = useRef(null);
 
-  // Queue subscription
+  // Queue subscription.
   useEffect(() => {
     initQueue().then(() => {
       const unsub = subscribe((snap) => setQueueInfo(snap));
@@ -40,7 +52,7 @@ export function AppProvider({ children }) {
     });
   }, []);
 
-  // On boot: restore token, reconcile session, start polling.
+  // On boot: restore token, reconcile session, load permission status.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -74,7 +86,14 @@ export function AppProvider({ children }) {
       } finally {
         if (!cancelled) {
           const p = await getPermissionStatus();
-          if (!cancelled) setPerm(p);
+          if (!cancelled) {
+            setPerm(p);
+            const ok =
+              p.foreground === 'granted' &&
+              p.background === 'granted' &&
+              p.servicesEnabled;
+            setPermissionsReady(ok);
+          }
           setBooting(false);
         }
       }
@@ -84,7 +103,7 @@ export function AppProvider({ children }) {
     };
   }, []);
 
-  // Foreground reconciliation + periodic polling while signed in.
+  // Foreground reconciliation.
   useEffect(() => {
     if (!user) return undefined;
     const unsub = subscribeToForeground(async () => {
@@ -96,7 +115,7 @@ export function AppProvider({ children }) {
     return () => unsub();
   }, [user]);
 
-  // Poll /sessions/my for a live view of the current session while signed in.
+  // Poll active session every 15s.
   useEffect(() => {
     if (!user) return undefined;
     const tick = async () => {
@@ -127,8 +146,12 @@ export function AppProvider({ children }) {
       setAccessToken(res.accessToken);
       await saveAccessToken(res.accessToken);
       setUser(res.user);
+
       const p = await getPermissionStatus();
       setPerm(p);
+      const ok = p.foreground === 'granted' && p.background === 'granted' && p.servicesEnabled;
+      setPermissionsReady(ok);
+
       const active = await reconcileSession();
       if (active) {
         setSession({ id: active._id ?? active.id, startedAt: active.startedAt });
@@ -152,6 +175,7 @@ export function AppProvider({ children }) {
       setUser(null);
       setSession(null);
       setError(null);
+      setPermissionsReady(false);
     } finally {
       setBusy(false);
     }
@@ -162,11 +186,18 @@ export function AppProvider({ children }) {
     setError(null);
     try {
       const s = await startVisit();
-      setSession({ id: s._id ?? s.id, startedAt: s.startedAt, foregroundOnly: s.foregroundOnly });
+      setSession({
+        id: s._id ?? s.id,
+        startedAt: s.startedAt,
+        foregroundOnly: s.foregroundOnly,
+      });
       return s;
     } catch (err) {
+      if (err.code === 'PERMISSION_REQUIRED') {
+        // Signal to the UI that onboarding must be shown.
+        setPermissionsReady(false);
+      }
       if (err instanceof ApiError && err.status === 409) {
-        // Already active — reconcile.
         const active = await reconcileSession();
         if (active) {
           setSession({ id: active._id ?? active.id, startedAt: active.startedAt });
@@ -197,7 +228,13 @@ export function AppProvider({ children }) {
   const refreshPerm = useCallback(async () => {
     const p = await getPermissionStatus();
     setPerm(p);
+    const ok = p.foreground === 'granted' && p.background === 'granted' && p.servicesEnabled;
+    setPermissionsReady(ok);
     return p;
+  }, []);
+
+  const markPermissionsReady = useCallback((v) => {
+    setPermissionsReady(v);
   }, []);
 
   const value = {
@@ -205,10 +242,9 @@ export function AppProvider({ children }) {
     user,
     session,
     perm,
+    permissionsReady,
     queueInfo,
     lastLocationAt,
-    lastAccuracy,
-    setLastAccuracy,
     error,
     setError,
     busy,
@@ -217,6 +253,8 @@ export function AppProvider({ children }) {
     beginVisit,
     finishVisit,
     refreshPerm,
+    markPermissionsReady,
+    checkPermissions,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

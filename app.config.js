@@ -1,26 +1,25 @@
 // Dynamic Expo config. Reads environment variables at build time.
-// Only variables prefixed EXPO_PUBLIC_ are exposed to the app runtime.
 const IS_DEV = process.env.APP_VARIANT !== 'production';
 
 export default {
   expo: {
-    name: IS_DEV ? 'EMS Field Visit (dev)' : 'EMS Field Visit',
+    name: IS_DEV ? 'Boishakhi EMS (dev)' : 'Boishakhi EMS',
     slug: 'ems-mobile',
-    version: '0.5.0',
+    version: '0.7.0',
     orientation: 'portrait',
     userInterfaceStyle: 'light',
     assetBundlePatterns: ['**/*'],
-    scheme: 'emsfieldvisit',
+    scheme: 'boishakhi-ems',
     plugins: [
       [
         'expo-location',
         {
           locationAlwaysAndWhenInUsePermission:
-            'EMS needs your location during an active visit so your supervisor can see the visit route you took. Location is only collected while you have explicitly started a visit.',
+            'Boishakhi EMS needs your location during an active visit so your supervisor can see the visit route you took. Location is only collected while you have explicitly started a visit.',
           locationAlwaysPermission:
-            'Allow EMS to access your location in the background while a visit is active. Tracking stops as soon as you end the visit.',
+            'Allow Boishakhi EMS to access your location in the background while a visit is active. Tracking stops as soon as you end the visit.',
           locationWhenInUsePermission:
-            'EMS uses your location while a visit is active to record the route you took.',
+            'Boishakhi EMS uses your location while a visit is active to record the route you took.',
           isAndroidBackgroundLocationEnabled: true,
           isAndroidForegroundServiceEnabled: true,
         },
@@ -28,7 +27,8 @@ export default {
       'expo-dev-client',
     ],
     android: {
-      package: 'com.example.emsfieldvisit',
+      package: 'com.boishakhi.ems',
+      versionCode: 7,
       permissions: [
         'ACCESS_COARSE_LOCATION',
         'ACCESS_FINE_LOCATION',
@@ -36,15 +36,17 @@ export default {
         'FOREGROUND_SERVICE',
         'FOREGROUND_SERVICE_LOCATION',
         'POST_NOTIFICATIONS',
+        'WAKE_LOCK',
+        'RECEIVE_BOOT_COMPLETED',
       ],
     },
     ios: {
-      bundleIdentifier: 'com.example.emsfieldvisit',
+      bundleIdentifier: 'com.boishakhi.ems',
       infoPlist: {
         NSLocationWhenInUseUsageDescription:
-          'EMS uses your location while a visit is active to record the route you took.',
+          'Boishakhi EMS uses your location while a visit is active to record the route you took.',
         NSLocationAlwaysAndWhenInUseUsageDescription:
-          'EMS tracks your location in the background only while you have an active visit.',
+          'Boishakhi EMS tracks your location in the background only while you have an active visit.',
         UIBackgroundModes: ['location'],
       },
     },

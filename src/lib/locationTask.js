@@ -7,29 +7,20 @@ import { uploadLoop } from './uploader.js';
 export const BACKGROUND_LOCATION_TASK = 'ems-background-location';
 
 /**
- * Tracking configuration.
- *
- * "Adaptive" strategy:
- *   - Ask Android for a location fix roughly every minute.
- *   - Only persist the fix if the device has moved at least MIN_DISTANCE_M meters
- *     since the last persisted point. This keeps the route clean (no duplicate
- *     points while standing still) and saves battery.
- *
- * Android may delay or batch fixes for battery; real-world intervals in
- * background are typically 1–5 minutes. That is a platform limitation, not
- * something we can override from JS.
+ * Adaptive tracking: check every minute, persist only if moved ≥50m.
+ * Android may delay fixes in Doze mode — that's a platform limitation.
  */
 const TRACKING_OPTIONS = {
-  accuracy: Location.Accuracy.High,      // High is fine here because we skip most fixes
-  timeInterval: 60_000,                  // ask for a fix ~every 60 s
-  distanceInterval: 50,                  // persist only if moved ≥50 m
+  accuracy: Location.Accuracy.High,
+  timeInterval: 60_000,
+  distanceInterval: 50,
   deferredUpdatesInterval: 30_000,
   deferredUpdatesDistance: 25,
   pausesUpdatesAutomatically: false,
   showsBackgroundLocationIndicator: true,
   activityType: Location.ActivityType.AutomotiveNavigation,
   foregroundService: {
-    notificationTitle: 'Visit tracking active — EMS',
+    notificationTitle: 'Boishakhi EMS — Visit tracking active',
     notificationBody:
       'Recording your location while you move during the active visit. Updates are approximate.',
     notificationColor: '#0f172a',
@@ -37,9 +28,7 @@ const TRACKING_OPTIONS = {
   },
 };
 
-// Track last persisted coordinate per session, so we can enforce the
-// 50 m rule ourselves even if the OS gives us more fixes than we asked for.
-const lastPersisted = new Map(); // sessionId -> { lat, lng }
+const lastPersisted = new Map();
 
 function distanceMeters(lat1, lng1, lat2, lng2) {
   const R = 6371000;
@@ -53,6 +42,13 @@ function distanceMeters(lat1, lng1, lat2, lng2) {
 }
 
 TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
+  // eslint-disable-next-line no-console
+  console.log('[bg-location] task fired', {
+    hasError: !!error,
+    hasData: !!data,
+    count: data?.locations?.length ?? 0,
+  });
+
   if (error) {
     // eslint-disable-next-line no-console
     console.warn('[bg-location] error:', error.message);
@@ -61,20 +57,21 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
   if (!data?.locations?.length) return;
 
   const active = await loadActiveSession();
-  if (!active?.sessionId) return;
+  if (!active?.sessionId) {
+    // eslint-disable-next-line no-console
+    console.log('[bg-location] no active session — ignoring');
+    return;
+  }
 
   const sessionId = active.sessionId;
-  const prev = lastPersisted.get(sessionId) || null;
-  let last = prev;
+  let last = lastPersisted.get(sessionId) || null;
 
   for (const loc of data.locations) {
     const { latitude, longitude, accuracy } = loc.coords;
 
-    // Reject clearly bad fixes.
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) continue;
     if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) continue;
 
-    // Enforce the 50 m rule ourselves (belt-and-braces with distanceInterval).
     if (last) {
       const d = distanceMeters(last.lat, last.lng, latitude, longitude);
       if (d < 50) continue;
@@ -95,13 +92,19 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
       await enqueue(point);
       last = { lat: latitude, lng: longitude };
       lastPersisted.set(sessionId, last);
+      // eslint-disable-next-line no-console
+      console.log('[bg-location] enqueued point:', {
+        lat: latitude.toFixed(5),
+        lng: longitude.toFixed(5),
+        capturedAt: point.capturedAt,
+        now: new Date().toISOString(),
+      });
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn('[bg-location] enqueue failed:', err.message);
     }
   }
 
-  // Opportunistic upload — safe to call repeatedly.
   try {
     await uploadLoop();
   } catch {
@@ -118,11 +121,30 @@ export async function isBackgroundTaskRegistered() {
 }
 
 export async function startBackgroundUpdates() {
+  // eslint-disable-next-line no-console
+  console.log('[bg-location] startBackgroundUpdates called');
+
   const already = await isBackgroundTaskRegistered();
+  // eslint-disable-next-line no-console
+  console.log('[bg-location] already registered?', already);
+
   if (already) {
-    await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK).catch(() => {});
+    try {
+      await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+    } catch {
+      /* ignore */
+    }
   }
-  await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, TRACKING_OPTIONS);
+
+  try {
+    await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, TRACKING_OPTIONS);
+    // eslint-disable-next-line no-console
+    console.log('[bg-location] startLocationUpdatesAsync success — task is live');
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[bg-location] startLocationUpdatesAsync FAILED:', err.message);
+    throw err;
+  }
 }
 
 export async function stopBackgroundUpdates() {
@@ -130,12 +152,13 @@ export async function stopBackgroundUpdates() {
     const registered = await isBackgroundTaskRegistered();
     if (registered) {
       await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+      // eslint-disable-next-line no-console
+      console.log('[bg-location] stopLocationUpdatesAsync success');
     }
   } catch (err) {
     // eslint-disable-next-line no-console
     console.warn('[bg-location] stop failed:', err.message);
   } finally {
-    // Clear the in-memory last-position map so a fresh session starts clean.
     lastPersisted.clear();
   }
 }
